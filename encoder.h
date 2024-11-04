@@ -16,6 +16,7 @@ int encoderInit(int gpio_a, int gpio_b);
 int encoderRead(void);
 void encoderWrite(int value);
 void encoderClose(void);
+int encoderRead_limit(int min, int max);
 
 #ifdef __cplusplus
 }

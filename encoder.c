@@ -103,5 +103,22 @@ void encoderWrite(int value)
 	data.value = value * 4;
 }
 
+int encoderRead_limit(int min, int max)
+{
+	int value = data.value/4;
+	if(value < min)
+	{
+	   	encoderWrite(min);
+		return min;
+	}
 
+	if(value > max)
+	{
+		encoderWrite(max);
+		return max;
+	}
+
+	return value;
+
+}
 

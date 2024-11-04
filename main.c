@@ -5,9 +5,11 @@
 //#include <string.h>
 #include <signal.h>
 
+#include "MENY/module_date_time/date_time_typedef.h"
 #include "OLED_I2C/ssd1306_i2c.h"
 #include "SCREEN_GRAPHICS/fonts.h"
 #include "SCREEN_GRAPHICS/screen_graphics.h"
+#include "SETTINGS/settings.h"
 #include "wiringx.h"
 #include <pthread.h>
 #include <sys/syscall.h>
@@ -15,10 +17,20 @@
 #include "encoder.h"
 #include "BUTTON/button.h"
 #include "MENY/meny.h"
+#include "DS3231/ds3231.h"
+#include "UTILITY/utility.h"
+#include "screeen_elements/screen_elements.h"
 
-volatile int running = 1; // Переменная для контроля выполнения
+
+volatile int running = 1; 
 button_TypeDef button_encoder;
 
+struct param settings;
+RTC_TimeTypeDef rtc_time_current;
+Date_TypeDef rtc_date_current;
+
+line_meny arr_line[15]; // масив линий, тут храним все линии меню
+config_meny config;    // главный конфиг меню
 
 void handle_sigint(int sig) {
     running = 0; // Устанавливаем флаг для завершения потоков
@@ -28,6 +40,14 @@ void handle_sigint(int sig) {
     GRAPHICS_UpdateScreen();
     encoderClose();
     wiringXGC();
+}
+
+void funcMenu_saveSettings(void)
+{
+	if(settings_write(&settings) == -1)
+	{
+		printf("ошибка записи настроек, funcMenu_saveSettings()");
+	}
 }
 
 int main()
@@ -61,72 +81,57 @@ int main()
 	GRAPHICS_UpdateScreen();
 	sleep(1);
 
-	char str[20];
-	char str_isr[20];
-
     encoderInit(1,0);
-//	pressButton_TypeDef status_button;
 
-	  // *********************** Динамическое создания моню *********************************
-  // определяем параметры которые будут изменяться через меню
-  struct param{
-    int16_t         value_int;   // табличный тип t_int
-  //  float           value_float; // табличный тип t_float
-    uint8_t         value_text;  // табличный тип t_text_list
-    RTC_TimeTypeDef time;        // табличный тип t_time
-    Date_TypeDef    date;        // табличный тип t_date
-  };
+	DS3231_Init( "/dev/i2c-1");
+	rtc_time_current = ds3231_read_rtc();
+	rtc_date_current = ds3231_read_date();
 
-  struct param paramValue;
-  char *text_list[5] = {"one" , "two" ,"three" ,"text_4" ,"text_5" };
-
-  line_meny arr_line[7]; // масив линий, тут храним все линии меню
-  config_meny config;    // главный конфиг меню
-
-  menu_init(&config, arr_line);                  // инциализируем главный конфиг с гарф.настройками по дефолту
-  menu_instal_Button(&config,  &button_encoder); // передаем конпку которая будет рулить меню
-
-  // Формируем само меню
-  add_lineMenu_int(&config,   " PARAMETR   ", "Set value",  &paramValue.value_int,    0,    100,   NONE);
-  add_lineMenu_text(&config,  " SELECT TYP ", "set select", &paramValue.value_text,  text_list, 5, NONE);
-  add_lineMenu_time(&config,  " SET TIME ",     "SET TIME",   &paramValue.time, NONE);
-  add_lineMenu_date(&config,  " SET DATE ",    "SET date",   &paramValue.date, NONE);
-  add_lineMenu_func(&config,  " START FUNC ",   NONE);
-  add_lineMenu_exit(&config,  "  EXIT");
-
-
-  // Отрисовка меню в режиме зацикливание, режим можно поменять в menu_conf.h
-  menu_draw(&config);
-
-	while(running)
+	int err_settings;
+	err_settings = settings_read(&settings);
+	if(err_settings == -1)
 	{
-	/*	status_button = readButtonStatus(&button_encoder);
-		GRAPHICS_Fill(GRAPHICS_COLOR_BLACK);
-		GRAPHICS_GotoXY(0,0);
-		if(status_button == PRESS_FAST)
-		//if( digitalRead(pinB) != 0)
-		{
-			GRAPHICS_Puts("FAST" ,&Font_10x10, GRAPHICS_COLOR_WHITE);	
-		    GRAPHICS_UpdateScreen();
-			sleep(1);
-		}
-		if(status_button == PRESS_LONG)
-		{
-			GRAPHICS_Puts("LONG" ,&Font_10x10, GRAPHICS_COLOR_WHITE);	
-		    GRAPHICS_UpdateScreen();
-			sleep(1);
-		}
-		//	if(status_button == PRESS_LONG) printf("press - long");
-	*/	
+//		printf("Ошибка чтения файла настроек\n");	
+		printf("Запись дефолтных настроек\n");
+		settings.action_week = 0b00110011;
+		settings.time_interval.Seconds = 5;
+		settings.time_start.Seconds = 0;
+		settings.time_start.Minutes = 10;	
+        settings.time_start.Hours = 0;
+		settings.time_stop.Seconds = 13;
+		settings_write(&settings);
+	}
+	// *********************** Динамическое создания моню *********************************
+
+	menu_init(&config, arr_line);                  // инциализируем главный конфиг с гарф.настройками
+	menu_instal_Button(&config,  &button_encoder); // передаем конпку которая будет рулить меню
+	// Формируем само меню
+	add_lineMenu_time(&config, " BEGIN   ", "BEGIN TIME",  &settings.time_start, funcMenu_saveSettings);
+	add_lineMenu_time(&config, " END     ", "END TIME", &settings.time_stop, funcMenu_saveSettings);
+	add_lineMenu_time(&config, " INTERVAL", "INTERVAL", &settings.time_interval, funcMenu_saveSettings);
+	add_lineMenu_time(&config, " TIME    ", "TIME RTC", &settings.time_rtc, ds3231_write_rtc);
+	add_lineMenu_date(&config, " DATE    ", "DATE RTC", &settings.date_rtc, ds3231_write_date);
+	add_lineMenu_func(&config, " WEEK ACTION", screen_set_week);
+	add_lineMenu_func(&config, " - SENSOR", screen_sensor);
+	add_lineMenu_func(&config, " - CAMERA ON", screen_camera_power_on);
+	add_lineMenu_func(&config, " - TEST SYSTEM", screen_test_system);
+	add_lineMenu_exit(&config, "  EXIT");
+
+//	menu_draw(&config);
+	screen_main(&settings);
+
+
+/*	while(running)
+	{
 		sprintf(str_isr, "%i", encoderRead());  
-	//	sprintf(str, "%u", value);  
+	//	sprintf(str, "%u", second);  
 		GRAPHICS_GotoXY(0,20);
-		//GRAPHICS_Puts(str, &Font_10x10,GRAPHICS_COLOR_WHITE);
+		GRAPHICS_Puts(str, &Font_10x10,GRAPHICS_COLOR_WHITE);
 		GRAPHICS_Puts("  ", &Font_19x18,GRAPHICS_COLOR_WHITE);
 		GRAPHICS_Puts(str_isr, &Font_10x10,GRAPHICS_COLOR_WHITE);
 		GRAPHICS_UpdateScreen();
 	
 	};
-
-
+*/
+	handle_sigint(0);
 }

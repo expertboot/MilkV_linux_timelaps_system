@@ -1,4 +1,5 @@
 #include "meny.h"
+#include <stdint.h>
 
 //extern struct param parametr;
 button_TypeDef *menu_button_enter;
@@ -6,6 +7,10 @@ button_TypeDef *menu_button_enter;
 #ifdef MODE_ONE_BUTTON
 static int16_t count_button = 0;
 #endif
+
+#include "../UTILITY/utility.h"
+
+extern struct param settings;
 
 // Блок управления меню, тут реализуем логику управления по энкодеру или по кнопкам
 int16_t menu_readControls(pressButton_TypeDef *statusButton)
@@ -176,6 +181,9 @@ void menu_draw(const config_meny *conf_meny)
 
 // ******** RTC костыль *************
 uint8_t saveSecondRTC = 0;
+//RTC_TimeTypeDef rtc_time_current;
+
+
 // ******************************
 
 	menu_writeControls(0);
@@ -184,7 +192,7 @@ uint8_t saveSecondRTC = 0;
     while(1)
     {
 // ******** RTC костыль *************
-//    	parametr.time_rtc = ds3231_read_rtc();// костыль, чиьаем время для его показа в меню как оно тикает
+    	settings.time_rtc = ds3231_read_rtc();// костыль, чиьаем время для его показа в меню как оно тикает
 // ******************************
 
      // очистка области отрисовки меню
@@ -236,13 +244,14 @@ uint8_t saveSecondRTC = 0;
 
      if(conf_meny->enable_loop == 1 ){  // если стоит цикл меню, то обновляем экран
     	 // костыль, для того что бы время шло в меню
- //		    if(saveEncoder != encoder || saveSecondRTC != parametr.time_rtc.Seconds ) // RTC костыль
- 		   // if(saveEncoder != encoder )
+ 		    if(saveEncoder != encoder || saveSecondRTC != settings.time_rtc.Seconds ) // RTC костыль
+ 		  //  if(saveEncoder != encoder )
 				if(GRAPHICS_isBusy() == 0)
 				{
 					 GRAPHICS_UpdateScreen();
+				//	 printf("timeRTC = %u.\n", settings.time_rtc.Seconds);  
 					 saveEncoder = encoder; // если обновления экрана занято предыдущим действияем, то нечего не делаем
-//					 saveSecondRTC = parametr.time_rtc.Seconds;
+					 saveSecondRTC = settings.time_rtc.Seconds;
 				}
  	 }
 
